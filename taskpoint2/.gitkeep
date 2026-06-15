@@ -1,1 +1,128 @@
+任务二 A2 修改总结：向量类型数据的距离计算
+
+  修改的文件列表（共 11 个文件，其中 0 个新建）
+
+  ---
+  1. src/observer/common/type/vector_type.h
+
+  修改内容：添加三个距离计算静态方法声明 —— cosine_distance、dot_product、euclidean_distance
+
+  2. src/observer/common/type/vector_type.cpp
+
+  修改内容：
+  - 添加 #include <cmath>（用于 std::sqrt）
+  - euclidean_distance(v1, v2, result)：计算 L2 距离 √(Σ(aᵢ−bᵢ)²)，先校验类型和维度
+  - dot_product(v1, v2, result)：计算内积 Σ(aᵢ×bᵢ)，含维度校验
+  - cosine_distance(v1, v2, result)：计算余弦距离 1 − (a·b)/(‖a‖×‖b‖)，零向量保护
+
+  ---
+  3. src/observer/sql/expr/expression.h
+
+  修改内容：
+  - ExprType 枚举新增 FUNCTION 类型
+  - 新增 FunctionExpr 类（在 AggregateExpr 之后）：
+    - enum class Type { STRING_TO_VECTOR, VECTOR_TO_STRING, DISTANCE }
+    - 构造函数接收 1~3 个 unique_ptr<Expression> 参数
+    - 重写 copy()、value_type()、value_length()、get_value()、try_get_value()
+    - 静态方法 type_from_string() 将函数名字符串转为枚举
+    - 私有方法 compute_distance() 封装距离计算逻辑
+
+  ---
+  4. src/observer/sql/expr/expression.cpp
+
+  修改内容：
+  - 添加 #include "common/type/vector_type.h"
+  - FunctionExpr 完整实现：
+    - get_value()：根据函数类型分发到 STRING_TO_VECTOR / VECTOR_TO_STRING / DISTANCE 三种计算逻辑
+    - try_get_value()：常量折叠，所有参数为常量时直接计算
+    - compute_distance()：将 method 字符串转为大写，调用 VectorType::cosine_distance/dot_product/euclidean_distance
+    - value_type()：STRING_TO_VECTOR→VECTORS，VECTOR_TO_STRING→CHARS，DISTANCE→FLOATS
+    - type_from_string()：字符串到枚举的映射
+
+  ---
+  5. src/observer/sql/parser/lex_sql.l
+
+  修改内容：添加两个新 token：
+  VECTOR_TO_STRING    RETURN_TOKEN(VECTOR_TO_STRING_T);
+  DISTANCE            RETURN_TOKEN(DISTANCE);
+
+  ---
+  6. src/observer/sql/parser/yacc_sql.y
+
+  修改内容：
+  - 新增 token 声明：VECTOR_TO_STRING_T、DISTANCE
+  - 新增 %type <expression> function_expression
+  - expression 规则新增 function_expression 分支
+  - 新增 function_expression 语法规则：
+    - STRING_TO_VECTOR_T LBRACE expression RBRACE
+    - VECTOR_TO_STRING_T LBRACE expression RBRACE
+    - DISTANCE LBRACE expression COMMA expression COMMA expression RBRACE
+  - 新增 create_function_expression() 辅助函数
+
+  ---
+  7. src/observer/sql/expr/expression_iterator.cpp
+
+  修改内容：在 iterate_child_expr 中添加 ExprType::FUNCTION 分支，遍历 FunctionExpr 的所有子表达式
+
+  ---
+  8. src/observer/sql/parser/expression_binder.h
+
+  修改内容：添加 bind_function_expression() 私有方法声明
+
+  ---
+  9. src/observer/sql/parser/expression_binder.cpp
+
+  修改内容：
+  - bind_expression() 调度器新增 ExprType::FUNCTION → bind_function_expression()
+  - 实现 bind_function_expression()：递归绑定每个子表达式（处理 UnboundFieldExpr → FieldExpr 转换等）
+
+  ---
+  10. src/observer/sql/optimizer/expression_rewriter.cpp
+
+  修改内容：在 rewrite_expression() 中添加 ExprType::FUNCTION 分支，递归重写所有子表达式
+
+  ---
+  11. 依赖 A1 的已有文件（无修改）
+
+  以下 A1 文件的方法被 A2 代码调用，无需二次修改：
+  - src/observer/common/value.cpp 的 set_string()、set_float()、set_vector()、data()、length()
+  - src/observer/common/type/vector_type.cpp 的 to_string()、set_value_from_str()
+  - src/observer/common/type/data_type.cpp 的 type_instance() 注册表
+
+  ---
+  功能架构总结
+
+  SQL: SELECT VECTOR_TO_STRING(vec_col), DISTANCE(vec_col, STRING_TO_VECTOR('[1,2,3]'), 'COSINE')
+           FROM items
+
+    词法分析 (lex_sql.l)
+    ├── STRING_TO_VECTOR → STRING_TO_VECTOR_T
+    ├── VECTOR_TO_STRING → VECTOR_TO_STRING_T
+    └── DISTANCE         → DISTANCE
+
+    语法分析 (yacc_sql.y)
+    ├── value: STRING_TO_VECTOR_T '(' SSS ')'           → ValueExpr(VECTORS) ← A1 已有
+    └── function_expression:
+         ├── STRING_TO_VECTOR_T  '(' expression ')'      → FunctionExpr(STRING_TO_VECTOR)
+         ├── VECTOR_TO_STRING_T '(' expression ')'       → FunctionExpr(VECTOR_TO_STRING)
+         └── DISTANCE '(' expr ',' expr ',' expr ')'     → FunctionExpr(DISTANCE)
+
+    表达式绑定 (expression_binder.cpp)
+    └── bind_function_expression: 递归绑定所有子表达式
+
+    表达式迭代 (expression_iterator.cpp)
+    └── iterate_child_expr: 遍历所有子表达式 (用于 group-by 收集、校验)
+
+    表达式重写 (expression_rewriter.cpp)
+    └── rewrite_expression: 递归重写子表达式 (用于优化器简化)
+
+    表达式求值 (expression.cpp FunctionExpr)
+    ├── STRING_TO_VECTOR: get_value(子表达式) → 字符串 → VectorType::set_value_from_str()
+    ├── VECTOR_TO_STRING: get_value(子表达式) → 向量 → VectorType::to_string()
+    └── DISTANCE: get_value(3个子表达式) → 向量1, 向量2, method
+    表达式求值 (expression.cpp FunctionExpr)
+    ├── STRING_TO_VECTOR: get_value(子表达式) → 字符串 → VectorType::set_value_from_str()
+    ├── VECTOR_TO_STRING: get_value(子表达式) → 向量 → VectorType::to_string()
+    └── DISTANCE: get_value(3个子表达式) → 向量1, 向量2, method
+         └── compute_distance → VectorType::cosine_distance / dot_product / euclidean_distance
 
