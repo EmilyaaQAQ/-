@@ -1,1 +1,117 @@
 
+任务三 A3 完整修改总结
+
+  修改/新建文件清单 (共 12 个文件)
+
+  ┌─────┬───────────────────────────────────────────────────────┬─────┬────────────────────────────────────────────┐
+  │  #  │                         文件                          │ 操  │                    说明                    │
+  │     │                                                       │ 作  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 1   │ src/observer/sql/parser/lex_sql.l                     │ 修  │ 添加 ORDER、ASC token                      │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 2   │ src/observer/sql/parser/yacc_sql.y                    │ 修  │ 添加 token、order_by/sort_list             │
+  │     │                                                       │ 改  │ 语法、select_stmt 集成                     │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 3   │ src/observer/sql/parser/parse_defs.h                  │ 修  │ 添加 OrderBySqlNode                        │
+  │     │                                                       │ 改  │ 结构体、SelectSqlNode.order_by 字段        │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 4   │ src/observer/sql/stmt/select_stmt.h                   │ 修  │ 添加 order_by_、order_by_expressions_ 成员 │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 5   │ src/observer/sql/stmt/select_stmt.cpp                 │ 修  │ 构建别名映射表、绑定 ORDER BY 表达式       │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 6   │ src/observer/sql/parser/expression_binder.h           │ 修  │ 添加别名映射表 (alias_map_) 支持           │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 7   │ src/observer/sql/parser/expression_binder.cpp         │ 修  │ bind_unbound_field_expression 中优先查别名 │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 8   │ src/observer/sql/operator/logical_operator.h          │ 修  │ LogicalOperatorType 添加 SORT              │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 9   │ src/observer/sql/operator/physical_operator.h         │ 修  │ PhysicalOperatorType 添加 SORT             │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 10  │ src/observer/sql/operator/sort_logical_operator.h     │ 新  │ 排序逻辑算子（含 OrderItem 结构体）        │
+  │     │                                                       │ 建  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 11  │ src/observer/sql/operator/sort_physical_operator.h    │ 新  │ 排序物理算子（含 OrderItem、SortTuple）    │
+  │     │                                                       │ 建  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 12  │ src/observer/sql/operator/sort_physical_operator.cpp  │ 新  │ 排序实现：全量读取→计算排序键→排序→逐行输  │
+  │     │                                                       │ 建  │ 出                                         │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 13  │ src/observer/sql/optimizer/logical_plan_generator.h   │ 修  │ 添加 create_order_by_plan 签名             │
+  │     │                                                       │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 14  │ src/observer/sql/optimizer/logical_plan_generator.cpp │ 修  │ Sort 算子插入到 Predicate/GroupBy 和       │
+  │     │                                                       │ 改  │ Project 之间                               │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 15  │ src/observer/sql/optimizer/physical_plan_generator.h  │ 修  │ 添加 create_plan(SortLogicalOperator&)     │
+  │     │                                                       │ 改  │ 签名                                       │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ 16  │ src/observer/sql/optimizer/physical_plan_generator.cp │ 修  │ Sort 物理计划生成                          │
+  │     │ p                                                     │ 改  │                                            │
+  ├─────┼───────────────────────────────────────────────────────┼─────┼────────────────────────────────────────────┤
+  │ —   │ test_order_by.sql                                     │ 新  │ ORDER BY 测试用例（11 个场景）             │
+  │     │                                                       │ 建  │                                            │
+  └─────┴───────────────────────────────────────────────────────┴─────┴────────────────────────────────────────────┘
+
+  ---
+  架构数据流
+
+  SQL: SELECT id, DISTANCE(emb, ...) AS dist FROM t ORDER BY dist DESC
+
+    解析器 (yacc_sql.y)
+    ├── expression_list: id, DISTANCE(...) AS dist
+    ├── where: (empty)
+    └── order_by: ORDER BY sort_list
+         └── sort_list: dist DESC
+              └── dist → UnboundFieldExpr("dist")
+                   └── OrderBySqlNode { expr, asc=false }
+
+    SelectSqlNode
+    ├── expressions: [id, DISTANCE(...)]
+    ├── order_by: [OrderBySqlNode(dist, desc)]
+    └── group_by: []
+
+    SelectStmt::create() (select_stmt.cpp)
+    ├── 绑定 SELECT 表达式 → bound_expressions
+    ├── 构建别名映射表: {"dist" → DISTANCE表达式副本}
+    ├── 绑定 ORDER BY 表达式 (通过别名映射表解析 "dist")
+    └── 存储: order_by_ (原始), order_by_expressions_ (已绑定)
+
+    逻辑计划 (logical_plan_generator.cpp)
+    ├── TableGet → Predicate → Sort → Project
+    └── SortLogicalOperator { OrderItem[]: {dist_expr(已绑定), asc=false} }
+
+    物理计划 (physical_plan_generator.cpp)
+    ├── TableScan → Predicate → SortPhysicalOperator → Project
+    └── SortPhysicalOperator::open()
+         ├── 读取 child 全部 Tuple
+         ├── 每行: 收集字段值 → 计算排序键(通过 sort expression 求值)
+         ├── std::sort(按 sort_keys 比较)
+         └── SortPhysicalOperator::next()
+              └── 按排序索引逐行输出 SortTuple
+
+  ---
+  关键实现细节
+
+  排序物理算子 (SortPhysicalOperator)：
+  - 在 open() 中全量读取子算子输出，存储每行所有字段值
+  - 为每行预计算排序键（通过 Expression::get_value() 对 SortTuple 求值）
+  - 使用 std::sort + 自定义比较器实现排序
+  - 比较器支持多列排序键、ASC/DESC 混合
+  - 输出时通过 SortTuple（内嵌 Value 数组的 Tuple 适配器）返回排序后的行
+
+  别名支持：
+  - SelectStmt::create() 中根据 SELECT 表达式的 name() 构建别名映射表
+  - ExpressionBinder::bind_unbound_field_expression() 优先查别名表，命中则引用对应表达式
+  - 支持 SELECT DISTANCE(...) AS dist ... ORDER BY dist
+
+  DISTANCE + ORDER BY 组合：
+  - DISTANCE 通过 A2 的 FunctionExpr 计算，返回 FLOAT
+  - ORDER BY 的排序表达式可以是 COLUMN、DISTANCE 结果、别名
+  - 排序比较通过 Value::compare() 实现，兼容多种返回类型
