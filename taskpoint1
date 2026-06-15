@@ -1,0 +1,11 @@
+模块	重点文件	关注内容
+类型枚举	src/observer/common/type/attr_type.h	确认 AttrType 中是否已有向量类型，保持枚举命名和全项目使用一致。
+类型注册	src/observer/common/type/data_type.cpp	确认新类型是否需要注册到 DataType 工厂或类型系统中。
+向量类型实现	src/observer/common/type/vector_type.h/.cpp	实现向量值的比较、格式转换等类型相关逻辑。
+运行时值	src/observer/common/value.h/.cpp	确认 Value 如何保存二进制向量数据，以及拷贝、移动、析构是否安全。
+词法/语法	src/observer/sql/parser/lex_sql.l、yacc_sql.y	增加 VECTOR、STRING_TO_VECTOR 等关键字和语法规则。
+解析结构	src/observer/sql/parser/parse_defs.h	统一维护向量默认维度、最大维度、元素大小等常量。
+建表语句	src/observer/sql/stmt/create_table_stmt.cpp	建表阶段校验向量长度和字段元数据。
+插入语句	src/observer/sql/stmt/insert_stmt.cpp	插入阶段检查 Value 类型、字段类型和字段长度是否匹配。
+表达式比较	src/observer/sql/expr/expression.cpp 等	限制 VECTOR 只能做 VECTOR 等值比较，拦截大小比较和跨类型比较。
+记录写入	src/observer/storage/table/table.cpp	确认 make_record / set_value_to_record 是否能按字段长度写入向量二进制数据。
